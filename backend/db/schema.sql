@@ -41,3 +41,18 @@ create policy "Allow authenticated insert"
 --   on vibe_logs for select
 --   to authenticated
 --   using ( auth.uid() = user_id );
+
+-- Table C: truth_labels (The Moat)
+create table if not exists truth_labels (
+  id uuid primary key default gen_random_uuid(),
+  user_vibe_vector vector(768), -- The original search vector
+  revealed_scent_id uuid references scent_profiles(id) not null,
+  timestamp timestamptz default now()
+);
+
+alter table truth_labels enable row level security;
+
+create policy "Allow authenticated insert truth"
+  on truth_labels for insert
+  to authenticated
+  with check ( true );

@@ -6,3 +6,14 @@ supabase
 python-dotenv
 pytest
 httpx
+fastapi
+uvicorn[standard]
+pydantic
+google-cloud-aiplatform
+supabase
+python-dotenv
+pytest
+httpx
+# NEW: Image processing support
+pillow
+python-multipart

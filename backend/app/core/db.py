@@ -1,18 +1,20 @@
 import os
 from supabase import create_client, Client
-from dotenv import load_dotenv
+from app.core.config import settings # <--- CHANGED
 
-load_dotenv()
+# Use the settings object we just created
+url = settings.SUPABASE_URL
+key = settings.SUPABASE_KEY
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-# Use Service Role Key for backend admin access, fallback to SUPABASE_KEY/ANON_KEY
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("SUPABASE_URL and a valid SUPABASE_KEY (Anon or Service Role) must be set in environment variables")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+if not url or not key:
+    print("WARNING: Supabase credentials missing. Check .env or Secret Manager.")
+    # We don't crash yet, to allow build steps to pass
+    
+# Only create client if keys exist
+supabase: Client = create_client(url, key) if url and key else None
 
 def get_db() -> Client:
     """Dependency to get Supabase client."""
+    if not supabase:
+        raise ValueError("Database connection not initialized")
     return supabase

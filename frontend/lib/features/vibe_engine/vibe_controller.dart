@@ -81,8 +81,16 @@ class VibeController extends Notifier<VibeState> {
     // await Future.delayed(const Duration(seconds: 2));
 
     try {
-      // Production API URL - Google Cloud Run
-      const String baseUrl = 'https://aether-brain-937286023670.us-central1.run.app';
+      // Improved Base URL logic: works on Web, Mobile, and Prod
+      String baseUrl = const String.fromEnvironment('API_URL');
+      if (baseUrl.isEmpty) {
+        if (kIsWeb) {
+          baseUrl = 'http://localhost:8000';
+        } else {
+          // Android Emulator default gateway
+          baseUrl = 'http://10.0.2.2:8000';
+        }
+      }
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/v1/analyze-vibe'),
@@ -92,7 +100,30 @@ class VibeController extends Notifier<VibeState> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        state = state.copyWith(isLoading: false, analysisResult: data);
+        
+        // Dynamic Theme Application
+        GenerativeTheme? newTheme;
+        if (data['theme_colors'] != null && data['theme_colors'] is List && data['theme_colors'].length >= 2) {
+          try {
+            final startColor = _parseHexColor(data['theme_colors'][0]);
+            final endColor = _parseHexColor(data['theme_colors'][1]);
+            newTheme = GenerativeTheme(
+              vibeStartColor: startColor,
+              vibeEndColor: endColor,
+              goldAccent: const Color(0xFFD4AF37),
+              physicsGravity: 0.2,
+              blurSigma: 12.0,
+            );
+          } catch (e) {
+            print("COLOR PARSE ERROR: $e");
+          }
+        }
+
+        state = state.copyWith(
+          isLoading: false, 
+          analysisResult: data,
+          theme: newTheme ?? state.theme, // Apply new theme or keep current if parsing failed
+        );
       } else {
         print('VIBE ENGINE ERROR: ${response.statusCode}');
         state = state.copyWith(isLoading: false);
@@ -103,10 +134,50 @@ class VibeController extends Notifier<VibeState> {
     }
   }
 
+  Color _parseHexColor(String hex) {
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    return Color(int.parse(hex, radix: 16));
+  }
+
+  Future<void> revealScent(String scentId, String userVibe) async {
+      try {
+        const String baseUrl = String.fromEnvironment(
+        'API_URL', 
+        defaultValue: 'http://127.0.0.1:8000'
+      );
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/blind-date-reveal'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'scent_id': scentId,
+          'user_vibe_description': userVibe
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("DATA MOAT: Successfully logged reveal for $scentId");
+      } else {
+        print("DATA MOAT ERROR: ${response.statusCode} - ${response.body}");
+      }
+    } catch (e) {
+      print("DATA MOAT EXCEPTION: $e");
+    }
+  }
+
   void logGroundTruth() {
-    // Mimic sending a "Verified Match"
-    // In a real app, we would pass the Scent ID and User Session
-    print("DATA MOAT: Captured verified preference for Scent ID: [UUID-MOCK-1234]");
+    // Legacy/Mock function - kept for compatibility if needed, but should effectively route to revealScent if data is available
+    if (state.analysisResult != null) {
+       final scentId = state.analysisResult!['scent_id'];
+       final reason = state.analysisResult!['match_reason'] ?? "Unknown Vibe";
+       
+       if (scentId != null) {
+          revealScent(scentId, reason);
+       } else {
+         print("DATA MOAT WARNING: No Scent ID available to log.");
+       }
+    }
   }
 }
 

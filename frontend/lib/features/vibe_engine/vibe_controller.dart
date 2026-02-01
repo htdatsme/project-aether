@@ -1,9 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../../core/theme/generative_theme.dart';
-import 'package:flutter/foundation.dart';
 
 class VibeState {
   final GenerativeTheme theme;
@@ -33,13 +33,8 @@ class VibeController extends Notifier<VibeState> {
   @override
   VibeState build() => VibeState(theme: GenerativeTheme.champagne());
 
-  void setChampagne() {
-    state = state.copyWith(theme: GenerativeTheme.champagne());
-  }
-
-  void setRose() {
-    state = state.copyWith(theme: GenerativeTheme.rose());
-  }
+  void setChampagne() => state = state.copyWith(theme: GenerativeTheme.champagne());
+  void setRose() => state = state.copyWith(theme: GenerativeTheme.rose());
 
   void setTeal() {
     state = state.copyWith(
@@ -74,34 +69,35 @@ class VibeController extends Notifier<VibeState> {
     }
   }
 
-  Future<void> analyzeVibe(String text) async {
+  // --- 📸 NEW: Supports Image Base64 ---
+  Future<void> analyzeVibe(String text, {String? imageBase64}) async {
     state = state.copyWith(isLoading: true);
-    
-    // Simulate network delay for "breathing" animation observation if needed
-    // await Future.delayed(const Duration(seconds: 2));
 
     try {
-      // Improved Base URL logic: works on Web, Mobile, and Prod
+      // Logic: works on Web, Mobile, and Prod
       String baseUrl = const String.fromEnvironment('API_URL');
       if (baseUrl.isEmpty) {
         if (kIsWeb) {
           baseUrl = 'http://localhost:8000';
         } else {
-          // Android Emulator default gateway
-          baseUrl = 'http://10.0.2.2:8000';
+          baseUrl = 'http://10.0.2.2:8000'; // Android localhost
         }
       }
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/v1/analyze-vibe'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'query': text}),
+        // Send image if available
+        body: jsonEncode({
+          'query': text,
+          'image_base64': imageBase64, 
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Dynamic Theme Application
+        // Dynamic Theme Application from Backend
         GenerativeTheme? newTheme;
         if (data['theme_colors'] != null && data['theme_colors'] is List && data['theme_colors'].length >= 2) {
           try {
@@ -122,7 +118,7 @@ class VibeController extends Notifier<VibeState> {
         state = state.copyWith(
           isLoading: false, 
           analysisResult: data,
-          theme: newTheme ?? state.theme, // Apply new theme or keep current if parsing failed
+          theme: newTheme ?? state.theme,
         );
       } else {
         print('VIBE ENGINE ERROR: ${response.statusCode}');
@@ -142,32 +138,29 @@ class VibeController extends Notifier<VibeState> {
 
   Future<void> revealScent(String scentId, String userVibe) async {
       try {
-        const String baseUrl = String.fromEnvironment(
-        'API_URL', 
-        defaultValue: 'http://127.0.0.1:8000'
-      );
+        String baseUrl = const String.fromEnvironment('API_URL');
+        if (baseUrl.isEmpty) baseUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/v1/blind-date-reveal'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'scent_id': scentId,
-          'user_vibe_description': userVibe
-        }),
-      );
+        final response = await http.post(
+          Uri.parse('$baseUrl/api/v1/blind-date-reveal'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'scent_id': scentId,
+            'user_vibe_description': userVibe
+          }),
+        );
 
-      if (response.statusCode == 200) {
-        print("DATA MOAT: Successfully logged reveal for $scentId");
-      } else {
-        print("DATA MOAT ERROR: ${response.statusCode} - ${response.body}");
-      }
+        if (response.statusCode == 200) {
+          print("DATA MOAT: Successfully logged reveal for $scentId");
+        } else {
+          print("DATA MOAT ERROR: ${response.statusCode} - ${response.body}");
+        }
     } catch (e) {
       print("DATA MOAT EXCEPTION: $e");
     }
   }
 
   void logGroundTruth() {
-    // Legacy/Mock function - kept for compatibility if needed, but should effectively route to revealScent if data is available
     if (state.analysisResult != null) {
        final scentId = state.analysisResult!['scent_id'];
        final reason = state.analysisResult!['match_reason'] ?? "Unknown Vibe";

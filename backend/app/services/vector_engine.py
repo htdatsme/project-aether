@@ -11,6 +11,7 @@ class VectorEngine:
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         self.location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
         
+        # Initialize Vertex AI
         if self.project_id:
             vertexai.init(project=self.project_id, location=self.location)
             # 1. The Reasoner: Gemini 1.5 Flash (Fast, Multimodal)
@@ -27,27 +28,29 @@ class VectorEngine:
         4. Search Database.
         """
         try:
-            # Step 1: Reasoning (Extracting the Vibe)
             vibe_description = ""
             
             if image_base64:
                 # Multimodal Analysis
-                image_part = Part.from_data(
-                    mime_type="image/jpeg",
-                    data=base64.b64decode(image_base64)
-                )
-                prompt = f"""
-                You are a luxury fragrance expert (The Nose). 
-                Analyze this image and the user's thought: "{text}".
-                Describe the olfactory 'vibe' of this visual. 
-                Focus on: Lighting, Texture, Mood, Season, and Color Palette.
-                Do NOT name specific perfumes. Just describe the aesthetic essence in 2 sentences.
-                """
-                response = self.generative_model.generate_content([image_part, prompt])
-                vibe_description = response.text
-                print(f"👁️ Visual Vibe Extracted: {vibe_description}")
+                try:
+                    image_part = Part.from_data(
+                        mime_type="image/jpeg",
+                        data=base64.b64decode(image_base64)
+                    )
+                    prompt = f"""
+                    You are a luxury fragrance expert (The Nose). 
+                    Analyze this image and the user's thought: "{text}".
+                    Describe the olfactory 'vibe' of this visual. 
+                    Focus on: Lighting, Texture, Mood, Season, and Color Palette.
+                    Do NOT name specific perfumes. Just describe the aesthetic essence in 2 sentences.
+                    """
+                    response = self.generative_model.generate_content([image_part, prompt])
+                    vibe_description = response.text
+                    print(f"👁️ Visual Vibe Extracted: {vibe_description}")
+                except Exception as img_e:
+                    print(f"Image processing error: {img_e}")
+                    vibe_description = text # Fallback
             else:
-                # Text-Only Analysis (Enhancement)
                 vibe_description = text
 
             # Step 2: Vectorization
@@ -88,36 +91,26 @@ class VectorEngine:
             print(f"Error searching Supabase: {e}")
             return []
 
-    def log_reveal(self, user_vibe: List[float], revealed_scent_id: str):
+    def log_search(self, user_vibe: List[float], revealed_scent_id: str):
+        # Legacy logging (optional, kept for backward compatibility)
+        pass
+
+    def log_reveal(self, scent_id: str, vibe_vector: List[float]):
         """
-        The Data Moat: Logs the Ground Truth (User accepted this scent).
+        Phase 3: The Data Moat.
+        Logs the verified match to the 'truth_labels' table.
         """
         supabase = get_db()
         try:
             data = {
-                "user_vibe_vector": user_vibe,
-                "revealed_scent_id": revealed_scent_id
+                "scent_id": scent_id,
+                "user_vibe_vector": vibe_vector,
+                "interaction_type": "blind_date_reveal"
+                # user_id is handled by RLS if auth is enabled
             }
-            # RPC call or direct insert if RLS allows
+            # Use service_role key logic in config.py if we need admin write,
+            # but for now standard client works if RLS policy allows authenticated insert
             supabase.table("truth_labels").insert(data).execute()
-            print(f"🔒 Data Moat: Logged reveal for {revealed_scent_id}")
+            print(f"✅ MOAT: Logged ground truth for {scent_id}")
         except Exception as e:
-            print(f"Error logging to truth_labels: {e}")
-
-    def log_vibe(self, text: str, embeddings: List[float], image_base64: Optional[str] = None):
-        """
-        Logs the 'Abstract Intent' for R&D.
-        """
-        supabase = get_db()
-        try:
-            # removing 'user_id' requirement for MVP demo if necessary, or assuming authenticated context
-            # For this MVP, we might need a workaround if user is not authed, but schema says user_id is NOT NULL?
-            # Let's check schema. User ID is not null. PROCEED WITH CAUTION.
-            # For now, we'll try to insert. If it fails due to auth, we'll need to handle it.
-            # Actually, let's just print for now if we don't have a user ID context easily available in this service.
-            # Wait, the requirement is to "Implement logging to vibe_logs".
-            # The schema `vibe_logs` requires `user_id`.
-            # In a real app, `get_db()` should be using the service role key or user token.
-            pass 
-        except Exception as e:
-            print(f"Error logging vibe: {e}")
+            print(f"❌ Error logging to truth_labels: {e}")
